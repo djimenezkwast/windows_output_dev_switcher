@@ -46,6 +46,12 @@ function Install-AudioModule {
 }
 
 function Show-Menu {
+    param(
+        [array]$Devices,
+        [object]$CurrentDefault,
+        [int]$SelectedIndex
+    )
+
     Clear-Host
 
     Write-Host ""
@@ -53,11 +59,74 @@ function Show-Menu {
     Write-Host "         AUDIO OUTPUT DEVICE SWITCHER         " -ForegroundColor Cyan
     Write-Host "  ============================================" -ForegroundColor Cyan
     Write-Host ""
+    Write-Host "  Use " -NoNewline -ForegroundColor White
+    Write-Host "[^]" -NoNewline -ForegroundColor Yellow
+    Write-Host " " -NoNewline
+    Write-Host "[v]" -NoNewline -ForegroundColor Yellow
+    Write-Host " arrows to select, " -NoNewline -ForegroundColor White
+    Write-Host "[Enter]" -NoNewline -ForegroundColor Yellow
+    Write-Host " to confirm" -ForegroundColor White
+    Write-Host ""
+
+    for ($i = 0; $i -lt $Devices.Count; $i++) {
+        $device = $Devices[$i]
+        $isSelected = ($i -eq $SelectedIndex)
+        $isCurrent = ($device.ID -eq $CurrentDefault.ID)
+
+        # Build prefix
+        if ($isSelected) {
+            $prefix = "  > "
+        }
+        else {
+            $prefix = "    "
+        }
+
+        # Build suffix
+        if ($isCurrent) {
+            $suffix = "  (current)"
+        }
+        else {
+            $suffix = ""
+        }
+
+        # Determine colors and write
+        if ($isSelected -and $isCurrent) {
+            Write-Host $prefix -NoNewline -ForegroundColor Cyan
+            Write-Host $device.Name -NoNewline -ForegroundColor Green
+            Write-Host $suffix -ForegroundColor Green
+        }
+        elseif ($isSelected) {
+            Write-Host $prefix -NoNewline -ForegroundColor Cyan
+            Write-Host "$($device.Name)$suffix" -ForegroundColor Cyan
+        }
+        elseif ($isCurrent) {
+            Write-Host $prefix -NoNewline
+            Write-Host $device.Name -NoNewline -ForegroundColor Green
+            Write-Host $suffix -ForegroundColor Green
+        }
+        else {
+            Write-Host "$prefix$($device.Name)$suffix" -ForegroundColor White
+        }
+    }
+
+    Write-Host ""
+    Write-Host "  Press " -NoNewline -ForegroundColor Gray
+    Write-Host "[Escape]" -NoNewline -ForegroundColor Yellow
+    Write-Host " to exit" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  ============================================" -ForegroundColor Cyan
+}
+
+function Select-AudioDevice {
+    # Install module if needed
+    Install-AudioModule
 
     $devices = @(Get-AudioDevice -List | Where-Object { $_.Type -eq "Playback" })
     $currentDefault = Get-AudioDevice -Playback
 
     if ($devices.Count -eq 0) {
+        Clear-Host
+        Write-Host ""
         Write-Host "  No audio devices found!" -ForegroundColor Red
         Write-Host ""
         Write-Host "  Press any key to exit..." -ForegroundColor Gray
@@ -65,54 +134,57 @@ function Show-Menu {
         exit 1
     }
 
-    Write-Host "  Select your audio output device:" -ForegroundColor White
-    Write-Host ""
-
+    # Start with current device selected
+    $selectedIndex = 0
     for ($i = 0; $i -lt $devices.Count; $i++) {
-        $device = $devices[$i]
-        $num = $i + 1
-
-        if ($device.ID -eq $currentDefault.ID) {
-            Write-Host "    [$num] $($device.Name)" -ForegroundColor Green -NoNewline
-            Write-Host "  << CURRENT" -ForegroundColor Green
-        }
-        else {
-            Write-Host "    [$num] $($device.Name)" -ForegroundColor White
+        if ($devices[$i].ID -eq $currentDefault.ID) {
+            $selectedIndex = $i
+            break
         }
     }
 
-    Write-Host ""
-    Write-Host "    [0] Exit" -ForegroundColor Gray
-    Write-Host ""
-    Write-Host "  ============================================" -ForegroundColor Cyan
-    Write-Host ""
-
-    return $devices
-}
-
-function Select-AudioDevice {
-    # Install module if needed
-    Install-AudioModule
-
     while ($true) {
-        $devices = Show-Menu
+        Show-Menu -Devices $devices -CurrentDefault $currentDefault -SelectedIndex $selectedIndex
 
-        Write-Host "  Type a number and press Enter: " -ForegroundColor Yellow -NoNewline
-        $selection = Read-Host
+        $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
 
-        if ($selection -match '^\d{1,2}$') {
-            $index = [int]$selection
-
-            if ($index -eq 0) {
-                Write-Host ""
-                Write-Host "  Goodbye!" -ForegroundColor Cyan
-                Write-Host ""
-                Start-Sleep -Milliseconds 500
-                exit 0
+        switch ($key.VirtualKeyCode) {
+            38 {
+                # Up arrow
+                $selectedIndex--
+                if ($selectedIndex -lt 0) {
+                    $selectedIndex = $devices.Count - 1
+                }
             }
+            40 {
+                # Down arrow
+                $selectedIndex++
+                if ($selectedIndex -ge $devices.Count) {
+                    $selectedIndex = 0
+                }
+            }
+            13 {
+                # Enter - confirm selection
+                $selectedDevice = $devices[$selectedIndex]
 
-            if ($index -ge 1 -and $index -le $devices.Count) {
-                $selectedDevice = $devices[$index - 1]
+                # Skip if already the current device
+                if ($selectedDevice.ID -eq $currentDefault.ID) {
+                    Write-Host ""
+                    Write-Host "  Already using: $($selectedDevice.Name)" -ForegroundColor Yellow
+                    Write-Host ""
+                    Write-Host "  Press any key to exit, or wait 2 seconds..." -ForegroundColor Gray
+
+                    $timeout = 2000
+                    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+                    while ($stopwatch.ElapsedMilliseconds -lt $timeout) {
+                        if ($Host.UI.RawUI.KeyAvailable) {
+                            $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+                            break
+                        }
+                        Start-Sleep -Milliseconds 100
+                    }
+                    exit 0
+                }
 
                 try {
                     $selectedDevice | Set-AudioDevice | Out-Null
@@ -122,7 +194,6 @@ function Select-AudioDevice {
                     Write-Host ""
                     Write-Host "  Press any key to exit, or wait 3 seconds..." -ForegroundColor Gray
 
-                    # Wait for keypress or timeout
                     $timeout = 3000
                     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
                     while ($stopwatch.ElapsedMilliseconds -lt $timeout) {
@@ -141,18 +212,21 @@ function Select-AudioDevice {
                     Write-Host ""
                     Write-Host "  Press any key to try again..." -ForegroundColor Gray
                     $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+
+                    # Refresh device list in case something changed
+                    $devices = @(Get-AudioDevice -List | Where-Object { $_.Type -eq "Playback" })
+                    $currentDefault = Get-AudioDevice -Playback
+                    $selectedIndex = 0
                 }
             }
-            else {
+            27 {
+                # Escape - exit
                 Write-Host ""
-                Write-Host "  Please enter a number between 0 and $($devices.Count)" -ForegroundColor Red
-                Start-Sleep -Seconds 1
+                Write-Host "  Goodbye!" -ForegroundColor Cyan
+                Write-Host ""
+                Start-Sleep -Milliseconds 500
+                exit 0
             }
-        }
-        else {
-            Write-Host ""
-            Write-Host "  Please enter a number" -ForegroundColor Red
-            Start-Sleep -Seconds 1
         }
     }
 }
