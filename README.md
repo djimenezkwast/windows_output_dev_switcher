@@ -15,10 +15,14 @@ Allow easy switching between audio devices (e.g., bluetooth transmitter on 3.5mm
 
 1. User double-clicks the `.bat` file
 2. PowerShell script displays list of playback devices with arrow-key navigation
-3. Current default device shown in green with "(current)" suffix
+3. Device status shown as suffix:
+   - `(default + comms)` in green - device is both default and communication device
+   - `(default)` in yellow - device is only the default device
+   - `(comms)` in yellow - device is only the communication device
 4. Selected item shown with `>` prefix in cyan
 5. Arrow keys move selection, Enter confirms, Escape exits
-6. Uses `AudioDeviceCmdlets` module from PSGallery (auto-installs on first run)
+6. Selecting a device sets it as both default and communication device
+7. Uses `AudioDeviceCmdlets` module from PSGallery (auto-installs on first run)
 
 ## Key Dependencies
 

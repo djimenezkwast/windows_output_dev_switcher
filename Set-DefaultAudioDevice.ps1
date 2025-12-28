@@ -149,6 +149,10 @@ function Select-AudioDevice {
     $devices = @(Get-AudioDevice -List | Where-Object { $_.Type -eq "Playback" })
     $currentDefault = Get-AudioDevice -Playback
     $currentComms = Get-AudioDevice -PlaybackCommunication
+    # Fall back to default if no communication device is set
+    if ($null -eq $currentComms) {
+        $currentComms = $currentDefault
+    }
 
     if ($devices.Count -eq 0) {
         Clear-Host
@@ -217,14 +221,12 @@ function Select-AudioDevice {
                 }
 
                 try {
-                    # Set as default playback device
+                    # Set as both default playback and communication device
                     Set-AudioDevice -ID $selectedDevice.ID | Out-Null
-                    # Set as default communication device
-                    Set-AudioDevice -ID $selectedDevice.ID -Communication | Out-Null
 
                     Write-Host ""
                     Write-Host "  SUCCESS! Now using: $($selectedDevice.Name)" -ForegroundColor Green
-                    Write-Host "  (set as both default and communication device)" -ForegroundColor Green
+                    Write-Host "  (set as default and communication device)" -ForegroundColor Green
                     Write-Host ""
                     Write-Host "  Press any key to exit, or wait 3 seconds..." -ForegroundColor Gray
 
@@ -251,6 +253,9 @@ function Select-AudioDevice {
                     $devices = @(Get-AudioDevice -List | Where-Object { $_.Type -eq "Playback" })
                     $currentDefault = Get-AudioDevice -Playback
                     $currentComms = Get-AudioDevice -PlaybackCommunication
+                    if ($null -eq $currentComms) {
+                        $currentComms = $currentDefault
+                    }
                     $selectedIndex = 0
                 }
             }
