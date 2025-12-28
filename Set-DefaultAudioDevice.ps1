@@ -84,19 +84,14 @@ function Show-Menu {
         }
 
         # Build suffix based on which defaults this device is
-        $suffixParts = @()
         if ($isDefault -and $isComms) {
-            $suffixParts += "default + comms"
+            $suffix = "  (default + comms)"
         }
         elseif ($isDefault) {
-            $suffixParts += "default"
+            $suffix = "  (default)"
         }
         elseif ($isComms) {
-            $suffixParts += "comms"
-        }
-
-        if ($suffixParts.Count -gt 0) {
-            $suffix = "  (" + ($suffixParts -join ", ") + ")"
+            $suffix = "  (comms)"
         }
         else {
             $suffix = ""
@@ -136,6 +131,8 @@ function Show-Menu {
 
     Write-Host ""
     Write-Host "  Press " -NoNewline -ForegroundColor Gray
+    Write-Host "[F5]" -NoNewline -ForegroundColor Yellow
+    Write-Host " to refresh, " -NoNewline -ForegroundColor Gray
     Write-Host "[Escape]" -NoNewline -ForegroundColor Yellow
     Write-Host " to exit" -ForegroundColor Gray
     Write-Host ""
@@ -149,6 +146,11 @@ function Select-AudioDevice {
     $devices = @(Get-AudioDevice -List | Where-Object { $_.Type -eq "Playback" })
     $currentDefault = Get-AudioDevice -Playback
     $currentComms = Get-AudioDevice -PlaybackCommunication
+
+    # Fall back if no default device is set (use first available)
+    if ($null -eq $currentDefault -and $devices.Count -gt 0) {
+        $currentDefault = $devices[0]
+    }
     # Fall back to default if no communication device is set
     if ($null -eq $currentComms) {
         $currentComms = $currentDefault
@@ -253,10 +255,29 @@ function Select-AudioDevice {
                     $devices = @(Get-AudioDevice -List | Where-Object { $_.Type -eq "Playback" })
                     $currentDefault = Get-AudioDevice -Playback
                     $currentComms = Get-AudioDevice -PlaybackCommunication
+                    if ($null -eq $currentDefault -and $devices.Count -gt 0) {
+                        $currentDefault = $devices[0]
+                    }
                     if ($null -eq $currentComms) {
                         $currentComms = $currentDefault
                     }
                     $selectedIndex = 0
+                }
+            }
+            116 {
+                # F5 - refresh device list
+                $devices = @(Get-AudioDevice -List | Where-Object { $_.Type -eq "Playback" })
+                $currentDefault = Get-AudioDevice -Playback
+                $currentComms = Get-AudioDevice -PlaybackCommunication
+                if ($null -eq $currentDefault -and $devices.Count -gt 0) {
+                    $currentDefault = $devices[0]
+                }
+                if ($null -eq $currentComms) {
+                    $currentComms = $currentDefault
+                }
+                # Keep selection in bounds
+                if ($selectedIndex -ge $devices.Count) {
+                    $selectedIndex = [Math]::Max(0, $devices.Count - 1)
                 }
             }
             27 {

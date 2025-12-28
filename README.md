@@ -21,8 +21,9 @@ Allow easy switching between audio devices (e.g., bluetooth transmitter on 3.5mm
    - `(comms)` in yellow - device is only the communication device
 4. Selected item shown with `>` prefix in cyan
 5. Arrow keys move selection, Enter confirms, Escape exits
-6. Selecting a device sets it as both default and communication device
-7. Uses `AudioDeviceCmdlets` module from PSGallery (auto-installs on first run)
+6. F5 refreshes the device list (useful if devices are plugged/unplugged)
+7. Selecting a device sets it as both default and communication device
+8. Uses `AudioDeviceCmdlets` module from PSGallery (auto-installs on first run)
 
 ## Key Dependencies
 
