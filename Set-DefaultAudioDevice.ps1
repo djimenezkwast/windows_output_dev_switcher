@@ -6,6 +6,32 @@
 # Set window title
 $Host.UI.RawUI.WindowTitle = "Audio Output Switcher"
 
+# Constants
+$Script:Timeouts = @{
+    AlreadySelected = 2000
+    Success = 3000
+    Goodbye = 500
+}
+
+function Get-DeviceState {
+    $devices = @(Get-AudioDevice -List | Where-Object { $_.Type -eq "Playback" })
+    $currentDefault = Get-AudioDevice -Playback
+    $currentComms = Get-AudioDevice -PlaybackCommunication
+
+    if ($null -eq $currentDefault -and $devices.Count -gt 0) {
+        $currentDefault = $devices[0]
+    }
+    if ($null -eq $currentComms) {
+        $currentComms = $currentDefault
+    }
+
+    return @{
+        Devices = $devices
+        Default = $currentDefault
+        Comms = $currentComms
+    }
+}
+
 function Install-AudioModule {
     if (-not (Get-Module -ListAvailable -Name AudioDeviceCmdlets)) {
         Write-Host ""
@@ -72,8 +98,8 @@ function Show-Menu {
     for ($i = 0; $i -lt $Devices.Count; $i++) {
         $device = $Devices[$i]
         $isSelected = ($i -eq $SelectedIndex)
-        $isDefault = ($device.ID -eq $CurrentDefault.ID)
-        $isComms = ($device.ID -eq $CurrentComms.ID)
+        $isDefault = ($null -ne $CurrentDefault) -and ($device.ID -eq $CurrentDefault.ID)
+        $isComms = ($null -ne $CurrentComms) -and ($device.ID -eq $CurrentComms.ID)
 
         # Build prefix
         if ($isSelected) {
@@ -143,18 +169,10 @@ function Select-AudioDevice {
     # Install module if needed
     Install-AudioModule
 
-    $devices = @(Get-AudioDevice -List | Where-Object { $_.Type -eq "Playback" })
-    $currentDefault = Get-AudioDevice -Playback
-    $currentComms = Get-AudioDevice -PlaybackCommunication
-
-    # Fall back if no default device is set (use first available)
-    if ($null -eq $currentDefault -and $devices.Count -gt 0) {
-        $currentDefault = $devices[0]
-    }
-    # Fall back to default if no communication device is set
-    if ($null -eq $currentComms) {
-        $currentComms = $currentDefault
-    }
+    $state = Get-DeviceState
+    $devices = $state.Devices
+    $currentDefault = $state.Default
+    $currentComms = $state.Comms
 
     if ($devices.Count -eq 0) {
         Clear-Host
@@ -196,7 +214,7 @@ function Select-AudioDevice {
                 }
             }
             13 {
-                # Enter - confirm selection
+                # Enter
                 $selectedDevice = $devices[$selectedIndex]
 
                 # Check if already set as both default and communication device
@@ -210,9 +228,8 @@ function Select-AudioDevice {
                     Write-Host ""
                     Write-Host "  Press any key to exit, or wait 2 seconds..." -ForegroundColor Gray
 
-                    $timeout = 2000
                     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-                    while ($stopwatch.ElapsedMilliseconds -lt $timeout) {
+                    while ($stopwatch.ElapsedMilliseconds -lt $Script:Timeouts.AlreadySelected) {
                         if ($Host.UI.RawUI.KeyAvailable) {
                             $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
                             break
@@ -232,9 +249,8 @@ function Select-AudioDevice {
                     Write-Host ""
                     Write-Host "  Press any key to exit, or wait 3 seconds..." -ForegroundColor Gray
 
-                    $timeout = 3000
                     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-                    while ($stopwatch.ElapsedMilliseconds -lt $timeout) {
+                    while ($stopwatch.ElapsedMilliseconds -lt $Script:Timeouts.Success) {
                         if ($Host.UI.RawUI.KeyAvailable) {
                             $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
                             break
@@ -252,40 +268,31 @@ function Select-AudioDevice {
                     $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
 
                     # Refresh device list in case something changed
-                    $devices = @(Get-AudioDevice -List | Where-Object { $_.Type -eq "Playback" })
-                    $currentDefault = Get-AudioDevice -Playback
-                    $currentComms = Get-AudioDevice -PlaybackCommunication
-                    if ($null -eq $currentDefault -and $devices.Count -gt 0) {
-                        $currentDefault = $devices[0]
-                    }
-                    if ($null -eq $currentComms) {
-                        $currentComms = $currentDefault
-                    }
+                    $state = Get-DeviceState
+                    $devices = $state.Devices
+                    $currentDefault = $state.Default
+                    $currentComms = $state.Comms
+                    # Reset selection after error
                     $selectedIndex = 0
                 }
             }
             116 {
                 # F5 - refresh device list
-                $devices = @(Get-AudioDevice -List | Where-Object { $_.Type -eq "Playback" })
-                $currentDefault = Get-AudioDevice -Playback
-                $currentComms = Get-AudioDevice -PlaybackCommunication
-                if ($null -eq $currentDefault -and $devices.Count -gt 0) {
-                    $currentDefault = $devices[0]
-                }
-                if ($null -eq $currentComms) {
-                    $currentComms = $currentDefault
-                }
-                # Keep selection in bounds
+                $state = Get-DeviceState
+                $devices = $state.Devices
+                $currentDefault = $state.Default
+                $currentComms = $state.Comms
+                # Keep selection in bounds after refresh
                 if ($selectedIndex -ge $devices.Count) {
                     $selectedIndex = [Math]::Max(0, $devices.Count - 1)
                 }
             }
             27 {
-                # Escape - exit
+                # Escape
                 Write-Host ""
                 Write-Host "  Goodbye!" -ForegroundColor Cyan
                 Write-Host ""
-                Start-Sleep -Milliseconds 500
+                Start-Sleep -Milliseconds $Script:Timeouts.Goodbye
                 exit 0
             }
         }
