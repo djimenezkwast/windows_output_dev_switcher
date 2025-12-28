@@ -49,6 +49,7 @@ function Show-Menu {
     param(
         [array]$Devices,
         [object]$CurrentDefault,
+        [object]$CurrentComms,
         [int]$SelectedIndex
     )
 
@@ -71,7 +72,8 @@ function Show-Menu {
     for ($i = 0; $i -lt $Devices.Count; $i++) {
         $device = $Devices[$i]
         $isSelected = ($i -eq $SelectedIndex)
-        $isCurrent = ($device.ID -eq $CurrentDefault.ID)
+        $isDefault = ($device.ID -eq $CurrentDefault.ID)
+        $isComms = ($device.ID -eq $CurrentComms.ID)
 
         # Build prefix
         if ($isSelected) {
@@ -81,19 +83,37 @@ function Show-Menu {
             $prefix = "    "
         }
 
-        # Build suffix
-        if ($isCurrent) {
-            $suffix = "  (current)"
+        # Build suffix based on which defaults this device is
+        $suffixParts = @()
+        if ($isDefault -and $isComms) {
+            $suffixParts += "default + comms"
+        }
+        elseif ($isDefault) {
+            $suffixParts += "default"
+        }
+        elseif ($isComms) {
+            $suffixParts += "comms"
+        }
+
+        if ($suffixParts.Count -gt 0) {
+            $suffix = "  (" + ($suffixParts -join ", ") + ")"
         }
         else {
             $suffix = ""
         }
+
+        $isCurrent = $isDefault -and $isComms
 
         # Determine colors and write
         if ($isSelected -and $isCurrent) {
             Write-Host $prefix -NoNewline -ForegroundColor Cyan
             Write-Host $device.Name -NoNewline -ForegroundColor Green
             Write-Host $suffix -ForegroundColor Green
+        }
+        elseif ($isSelected -and ($isDefault -or $isComms)) {
+            Write-Host $prefix -NoNewline -ForegroundColor Cyan
+            Write-Host $device.Name -NoNewline -ForegroundColor Cyan
+            Write-Host $suffix -ForegroundColor Yellow
         }
         elseif ($isSelected) {
             Write-Host $prefix -NoNewline -ForegroundColor Cyan
@@ -103,6 +123,11 @@ function Show-Menu {
             Write-Host $prefix -NoNewline
             Write-Host $device.Name -NoNewline -ForegroundColor Green
             Write-Host $suffix -ForegroundColor Green
+        }
+        elseif ($isDefault -or $isComms) {
+            Write-Host $prefix -NoNewline
+            Write-Host $device.Name -NoNewline -ForegroundColor White
+            Write-Host $suffix -ForegroundColor Yellow
         }
         else {
             Write-Host "$prefix$($device.Name)$suffix" -ForegroundColor White
@@ -123,6 +148,7 @@ function Select-AudioDevice {
 
     $devices = @(Get-AudioDevice -List | Where-Object { $_.Type -eq "Playback" })
     $currentDefault = Get-AudioDevice -Playback
+    $currentComms = Get-AudioDevice -PlaybackCommunication
 
     if ($devices.Count -eq 0) {
         Clear-Host
@@ -144,7 +170,7 @@ function Select-AudioDevice {
     }
 
     while ($true) {
-        Show-Menu -Devices $devices -CurrentDefault $currentDefault -SelectedIndex $selectedIndex
+        Show-Menu -Devices $devices -CurrentDefault $currentDefault -CurrentComms $currentComms -SelectedIndex $selectedIndex
 
         $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
 
@@ -167,10 +193,14 @@ function Select-AudioDevice {
                 # Enter - confirm selection
                 $selectedDevice = $devices[$selectedIndex]
 
-                # Skip if already the current device
-                if ($selectedDevice.ID -eq $currentDefault.ID) {
+                # Check if already set as both default and communication device
+                $isAlreadyDefault = ($selectedDevice.ID -eq $currentDefault.ID)
+                $isAlreadyComms = ($selectedDevice.ID -eq $currentComms.ID)
+
+                if ($isAlreadyDefault -and $isAlreadyComms) {
                     Write-Host ""
                     Write-Host "  Already using: $($selectedDevice.Name)" -ForegroundColor Yellow
+                    Write-Host "  (both default and communication device)" -ForegroundColor Yellow
                     Write-Host ""
                     Write-Host "  Press any key to exit, or wait 2 seconds..." -ForegroundColor Gray
 
@@ -187,10 +217,14 @@ function Select-AudioDevice {
                 }
 
                 try {
-                    $selectedDevice | Set-AudioDevice | Out-Null
+                    # Set as default playback device
+                    Set-AudioDevice -ID $selectedDevice.ID | Out-Null
+                    # Set as default communication device
+                    Set-AudioDevice -ID $selectedDevice.ID -Communication | Out-Null
 
                     Write-Host ""
                     Write-Host "  SUCCESS! Now using: $($selectedDevice.Name)" -ForegroundColor Green
+                    Write-Host "  (set as both default and communication device)" -ForegroundColor Green
                     Write-Host ""
                     Write-Host "  Press any key to exit, or wait 3 seconds..." -ForegroundColor Gray
 
@@ -216,6 +250,7 @@ function Select-AudioDevice {
                     # Refresh device list in case something changed
                     $devices = @(Get-AudioDevice -List | Where-Object { $_.Type -eq "Playback" })
                     $currentDefault = Get-AudioDevice -Playback
+                    $currentComms = Get-AudioDevice -PlaybackCommunication
                     $selectedIndex = 0
                 }
             }
