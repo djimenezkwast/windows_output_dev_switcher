@@ -25,6 +25,20 @@ Allow easy switching between audio devices (e.g., bluetooth transmitter on 3.5mm
 7. Selecting a device sets it as both default and communication device
 8. Uses `AudioDeviceCmdlets` module from PSGallery (auto-installs on first run)
 
+## Optional: Global Hotkey
+
+You can assign a keyboard shortcut to launch the switcher from anywhere:
+
+1. Right-click `Switch-Audio-Output.bat` → **Create shortcut**
+2. Move the shortcut to your Desktop or Start Menu folder
+3. Right-click the shortcut → **Properties**
+4. Click the **Shortcut key** field and press your desired key combo (e.g., `Ctrl+Alt+A`)
+5. Click **OK**
+
+Now pressing your hotkey from any application will open the audio switcher.
+
+**Note:** Windows only allows `Ctrl+Alt+<key>` combinations for shortcut keys.
+
 ## Key Dependencies
 
 - PowerShell with execution policy bypass (handled by .bat launcher)
