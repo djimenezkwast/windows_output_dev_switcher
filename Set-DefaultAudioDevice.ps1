@@ -256,6 +256,8 @@ function Select-AudioDevice {
 
         $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
 
+        # Key codes must be literals - PowerShell switch cases are evaluated at parse time,
+        # so variable references like $Script:Keys.Up won't work (treated as strings).
         switch ($key.VirtualKeyCode) {
             38 {
                 # Up arrow
