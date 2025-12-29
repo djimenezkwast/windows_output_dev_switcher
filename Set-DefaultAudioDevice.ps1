@@ -1,6 +1,10 @@
 <#
 .SYNOPSIS
     Easy audio output device switcher for Windows.
+
+.NOTES
+    Requires AudioDeviceCmdlets module (auto-installed on first run).
+    We intentionally don't use #Requires -Modules to allow auto-installation.
 #>
 
 # Set window title
@@ -11,6 +15,41 @@ $Script:Timeouts = @{
     AlreadySelected = 2000
     Success = 3000
     Goodbye = 500
+}
+
+function Wait-WithKeyExit {
+    param([int]$Milliseconds)
+
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    while ($stopwatch.ElapsedMilliseconds -lt $Milliseconds) {
+        if ($Host.UI.RawUI.KeyAvailable) {
+            $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+            break
+        }
+        Start-Sleep -Milliseconds 100
+    }
+}
+
+function Update-DeviceStateVariables {
+    param([ref]$Devices, [ref]$CurrentDefault, [ref]$CurrentComms, [ref]$SelectedIndex)
+
+    try {
+        $state = Get-DeviceState
+        $Devices.Value = $state.Devices
+        $CurrentDefault.Value = $state.Default
+        $CurrentComms.Value = $state.Comms
+
+        # Keep selection in bounds after refresh
+        if ($SelectedIndex.Value -ge $state.Devices.Count) {
+            $SelectedIndex.Value = [Math]::Max(0, $state.Devices.Count - 1)
+        }
+    }
+    catch {
+        Write-Host ""
+        Write-Host "  WARNING: Could not refresh device list." -ForegroundColor Yellow
+        Write-Host "  $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host ""
+    }
 }
 
 function Get-DeviceState {
@@ -81,9 +120,13 @@ function Show-Menu {
 
     Clear-Host
 
+    $deviceCount = $Devices.Count
+    $deviceLabel = if ($deviceCount -eq 1) { "device" } else { "devices" }
+
     Write-Host ""
     Write-Host "  ============================================" -ForegroundColor Cyan
     Write-Host "         AUDIO OUTPUT DEVICE SWITCHER         " -ForegroundColor Cyan
+    Write-Host "           ($deviceCount $deviceLabel available)            " -ForegroundColor Gray
     Write-Host "  ============================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  Use " -NoNewline -ForegroundColor White
@@ -169,7 +212,20 @@ function Select-AudioDevice {
     # Install module if needed
     Install-AudioModule
 
-    $state = Get-DeviceState
+    try {
+        $state = Get-DeviceState
+    }
+    catch {
+        Clear-Host
+        Write-Host ""
+        Write-Host "  ERROR: Could not query audio devices." -ForegroundColor Red
+        Write-Host "  $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "  Press any key to exit..." -ForegroundColor Gray
+        $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+        exit 1
+    }
+
     $devices = $state.Devices
     $currentDefault = $state.Default
     $currentComms = $state.Comms
@@ -186,10 +242,12 @@ function Select-AudioDevice {
 
     # Start with current device selected
     $selectedIndex = 0
-    for ($i = 0; $i -lt $devices.Count; $i++) {
-        if ($devices[$i].ID -eq $currentDefault.ID) {
-            $selectedIndex = $i
-            break
+    if ($null -ne $currentDefault) {
+        for ($i = 0; $i -lt $devices.Count; $i++) {
+            if ($devices[$i].ID -eq $currentDefault.ID) {
+                $selectedIndex = $i
+                break
+            }
         }
     }
 
@@ -228,14 +286,7 @@ function Select-AudioDevice {
                     Write-Host ""
                     Write-Host "  Press any key to exit, or wait 2 seconds..." -ForegroundColor Gray
 
-                    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-                    while ($stopwatch.ElapsedMilliseconds -lt $Script:Timeouts.AlreadySelected) {
-                        if ($Host.UI.RawUI.KeyAvailable) {
-                            $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-                            break
-                        }
-                        Start-Sleep -Milliseconds 100
-                    }
+                    Wait-WithKeyExit -Milliseconds $Script:Timeouts.AlreadySelected
                     exit 0
                 }
 
@@ -249,14 +300,7 @@ function Select-AudioDevice {
                     Write-Host ""
                     Write-Host "  Press any key to exit, or wait 3 seconds..." -ForegroundColor Gray
 
-                    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-                    while ($stopwatch.ElapsedMilliseconds -lt $Script:Timeouts.Success) {
-                        if ($Host.UI.RawUI.KeyAvailable) {
-                            $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-                            break
-                        }
-                        Start-Sleep -Milliseconds 100
-                    }
+                    Wait-WithKeyExit -Milliseconds $Script:Timeouts.Success
                     exit 0
                 }
                 catch {
@@ -268,24 +312,12 @@ function Select-AudioDevice {
                     $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
 
                     # Refresh device list in case something changed
-                    $state = Get-DeviceState
-                    $devices = $state.Devices
-                    $currentDefault = $state.Default
-                    $currentComms = $state.Comms
-                    # Reset selection after error
-                    $selectedIndex = 0
+                    Update-DeviceStateVariables -Devices ([ref]$devices) -CurrentDefault ([ref]$currentDefault) -CurrentComms ([ref]$currentComms) -SelectedIndex ([ref]$selectedIndex)
                 }
             }
             116 {
                 # F5 - refresh device list
-                $state = Get-DeviceState
-                $devices = $state.Devices
-                $currentDefault = $state.Default
-                $currentComms = $state.Comms
-                # Keep selection in bounds after refresh
-                if ($selectedIndex -ge $devices.Count) {
-                    $selectedIndex = [Math]::Max(0, $devices.Count - 1)
-                }
+                Update-DeviceStateVariables -Devices ([ref]$devices) -CurrentDefault ([ref]$currentDefault) -CurrentComms ([ref]$currentComms) -SelectedIndex ([ref]$selectedIndex)
             }
             27 {
                 # Escape
