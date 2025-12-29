@@ -291,7 +291,9 @@ function Select-AudioDevice {
                 }
 
                 try {
-                    # Set as both default playback and communication device
+                    # Set-AudioDevice -ID sets BOTH default AND communication device by default.
+                    # Use -DefaultOnly or -CommunicationOnly to set just one.
+                    # See: https://github.com/frgnca/AudioDeviceCmdlets#readme
                     Set-AudioDevice -ID $selectedDevice.ID | Out-Null
 
                     Write-Host ""
